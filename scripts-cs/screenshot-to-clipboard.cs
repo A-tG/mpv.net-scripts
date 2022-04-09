@@ -23,15 +23,16 @@ class Script
         if (args[0] != Name) return;
 
         string text = "Copy Screenshot to clipboard";
-        m_core.CommandV("show-text", text, "3000");
+        m_core.CommandV("show-text", text);
         text += TryScreenshotToClipBoard() ?
             ": Succeded" :
             ": Failed";
-        m_core.CommandV("show-text", text, "3000");
+        m_core.CommandV("show-text", text);
     }
 
     public bool TryScreenshotToClipBoard()
     {
+
         bool result = false;
         try
         {
