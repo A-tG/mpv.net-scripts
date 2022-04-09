@@ -5,6 +5,9 @@ using System.IO;
 using System.Threading;
 using System.Windows.Forms;
 
+// Add to input.conf
+// Ctrl+c script-message screenshot-to-clipboard
+
 class Script
 {
     const string Name = "screenshot-to-clipboard"; 
