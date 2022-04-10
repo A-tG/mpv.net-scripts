@@ -156,12 +156,9 @@ class Script
                 var currWritePtr = bmData.Scan0;
                 for (ulong i = 0; i < len; i += 4)
                 {
-                    var bPtr = currReadPtr;
-                    var gPtr = currReadPtr + 1;
-                    var rPtr = currReadPtr + 2;
-                    Marshal.WriteByte(currWritePtr, Marshal.ReadByte(rPtr));
-                    Marshal.WriteByte(currWritePtr, 1, Marshal.ReadByte(gPtr));
-                    Marshal.WriteByte(currWritePtr, 2, Marshal.ReadByte(bPtr));
+                    Marshal.WriteByte(currWritePtr, Marshal.ReadByte(currReadPtr));
+                    Marshal.WriteByte(currWritePtr, 1, Marshal.ReadByte(currReadPtr + 1));
+                    Marshal.WriteByte(currWritePtr, 2, Marshal.ReadByte(currReadPtr + 2));
                     currReadPtr = IntPtr.Add(currReadPtr, 4);
                     currWritePtr = IntPtr.Add(currWritePtr, 3);
                 }
