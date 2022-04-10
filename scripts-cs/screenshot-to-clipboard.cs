@@ -1,12 +1,31 @@
 using mpvnet;
 using System;
+using System.Collections.Generic;
 using System.Drawing;
+using System.Drawing.Imaging;
 using System.IO;
+using System.Linq;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows.Forms;
 
 // Add to input.conf
 // Ctrl+c script-message screenshot-to-clipboard
+
+[StructLayout(LayoutKind.Sequential)]
+struct mpv_node_list
+{
+    public int num;
+    public IntPtr values;
+    public IntPtr keys;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+struct mpv_byte_array
+{
+    public IntPtr data;
+    public UIntPtr size;
+}
 
 class Script
 {
@@ -19,36 +38,17 @@ class Script
         m_core.ClientMessage += OnMessage;
     }
 
-    private void OnMessage(string[] args)
+    public bool TryScreenshotToClipboard()
     {
-        if ((args == null) || (args.Length == 0)) return;
-
-        if (args[0] != Name) return;
-
-        string text = "Copy Screenshot to clipboard";
-        m_core.CommandV("show-text", text);
-        text += TryScreenshotToClipBoard() ?
-            ": Succeded" :
-            ": Failed";
-        m_core.CommandV("show-text", text);
-    }
-
-    public bool TryScreenshotToClipBoard()
-    {
-
         bool result = false;
         try
         {
-            var path = CreateTempScreenshot();
+            var img = GetRawScreenshot();
 
             var thread = new Thread(() =>
             {
-                using (var img = new Bitmap(path))
-                {
-                    // need to be done in STA thread
-                    Clipboard.SetImage(img);
-                }
-                File.Delete(path);
+                // need to be done in STA thread
+                Clipboard.SetImage(img);
             });
             thread.SetApartmentState(ApartmentState.STA);
             thread.Start();
@@ -60,14 +60,11 @@ class Script
         return result;
     }
 
-    private string CreateTempScreenshot()
+    [DllImport("mpv-2.dll")]
+    internal static extern int mpv_command_node(IntPtr ctx, libmpv.mpv_node args, IntPtr result);
+
+    private Bitmap GetRawScreenshot()
     {
-<<<<<<< Updated upstream
-        var fileName = Guid.NewGuid().ToString() + ".png";
-        var path = Path.Combine(Path.GetTempPath(), fileName);
-        m_core.CommandV("screenshot-to-file", path);
-        return path;
-=======
         var args = new libmpv.mpv_node();
         var result = new libmpv.mpv_node();
 
@@ -189,6 +186,5 @@ class Script
             ": Succeded" :
             ": Failed";
         m_core.CommandV("show-text", text);
->>>>>>> Stashed changes
     }
 }
