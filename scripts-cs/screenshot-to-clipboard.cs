@@ -55,7 +55,7 @@ class Script
     }
 
     [DllImport("mpv-2.dll")]
-    internal static extern int mpv_command_node(IntPtr ctx, libmpv.mpv_node args, libmpv.mpv_node result);
+    internal static extern int mpv_command_node(IntPtr ctx, libmpv.mpv_node args, IntPtr result);
 
     private void GetRawScreenshot()
     {
@@ -79,9 +79,17 @@ class Script
         args.format = libmpv.mpv_format.MPV_FORMAT_NODE_ARRAY;
         Marshal.StructureToPtr(list, listPtr, false);
 
-        var res = mpv_command_node(m_core.Handle, args, result);
-        m_core.CommandV("show-text", res.ToString());
+        var resultPtr = Marshal.AllocHGlobal(Marshal.SizeOf(result));
+        Marshal.StructureToPtr(result, resultPtr, false);
 
+        var res = mpv_command_node(m_core.Handle, args, resultPtr);
+
+        result = (libmpv.mpv_node)Marshal.PtrToStructure(resultPtr, typeof(libmpv.mpv_node));
+        var resulList = (mpv_node_list)Marshal.PtrToStructure(result.list, typeof(mpv_node_list));
+        m_core.CommandV("show-text", resulList.num.ToString());
+
+        libmpv.mpv_free_node_contents(resultPtr);
+        Marshal.FreeHGlobal(resultPtr);
         Marshal.FreeHGlobal(commandPtr);
         Marshal.FreeHGlobal(listValPtr);
         Marshal.FreeHGlobal(listPtr);
