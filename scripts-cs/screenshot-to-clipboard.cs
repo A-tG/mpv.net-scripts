@@ -157,9 +157,11 @@ class Script
                 {
                     var rPtr = readPtr + 4 * i;
                     var wPtr = writePtr + 3 * i;
+                    const int gOfs = 1;
+                    const int bOfs = 2;
                     Marshal.WriteByte(wPtr, Marshal.ReadByte(rPtr));
-                    Marshal.WriteByte(wPtr, 1, Marshal.ReadByte(rPtr + 1));
-                    Marshal.WriteByte(wPtr, 2, Marshal.ReadByte(rPtr + 2));
+                    Marshal.WriteByte(wPtr, gOfs, Marshal.ReadByte(rPtr + gOfs));
+                    Marshal.WriteByte(wPtr, bOfs, Marshal.ReadByte(rPtr + bOfs));
                 });
                 bm.UnlockBits(bmData);
                 break;
