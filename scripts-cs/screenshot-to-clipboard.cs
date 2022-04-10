@@ -145,21 +145,27 @@ class Script
         switch (format)
         {
             case "bgr0":
-                bm = new Bitmap((int)w, (int)h, PixelFormat.Format24bppRgb);
-                var currPtr = ba.data;
+                var PixFormat = PixelFormat.Format24bppRgb;
+                bm = new Bitmap((int)w, (int)h, PixFormat);
+
+                var rect = new Rectangle(0, 0, (int)w, (int)h);
+                var bmData = bm.LockBits(rect, ImageLockMode.ReadWrite, PixFormat);
+
                 var len = ba.size.ToUInt64();
-                for (int y = 0; y < h; y++)
+                var currReadPtr = ba.data;
+                var currWritePtr = bmData.Scan0;
+                for (ulong i = 0; i < len; i += 4)
                 {
-                    for (int x = 0; x < w; x++)
-                    {
-                        var B = Marshal.ReadByte(currPtr);
-                        var G = Marshal.ReadByte(currPtr, 1);
-                        var R = Marshal.ReadByte(currPtr, 2);
-                        var color = Color.FromArgb(R, G, B);
-                        bm.SetPixel(x, y, color);
-                        currPtr = IntPtr.Add(currPtr, 4);
-                    }
+                    var bPtr = currReadPtr;
+                    var gPtr = currReadPtr + 1;
+                    var rPtr = currReadPtr + 2;
+                    Marshal.WriteByte(currWritePtr, Marshal.ReadByte(rPtr));
+                    Marshal.WriteByte(currWritePtr, 1, Marshal.ReadByte(gPtr));
+                    Marshal.WriteByte(currWritePtr, 2, Marshal.ReadByte(bPtr));
+                    currReadPtr = IntPtr.Add(currReadPtr, 4);
+                    currWritePtr = IntPtr.Add(currWritePtr, 3);
                 }
+                bm.UnlockBits(bmData);
                 break;
             default:
                 throw new ArgumentException("Not supported color format");
