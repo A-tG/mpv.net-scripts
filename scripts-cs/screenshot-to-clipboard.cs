@@ -1,12 +1,10 @@
 using mpvnet;
 using System;
-using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Imaging;
-using System.IO;
-using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 
 // Add to input.conf
@@ -93,6 +91,7 @@ class Script
         result = Marshal.PtrToStructure<libmpv.mpv_node>(resultPtr);
         var resultList = Marshal.PtrToStructure<mpv_node_list>(result.list);
 
+
         var screenshot = BitmapFromMpvNodeList(resultList);
 
         libmpv.mpv_free_node_contents(resultPtr);
@@ -152,16 +151,16 @@ class Script
                 var bmData = bm.LockBits(rect, ImageLockMode.ReadWrite, PixFormat);
 
                 var len = (int)(ba.size.ToUInt64() / 4);
-                var currReadPtr = ba.data;
-                var currWritePtr = bmData.Scan0;
-                for (int i = 0; i < len; i++)
+                var readPtr = ba.data;
+                var writePtr = bmData.Scan0;
+                Parallel.For(0, len, (i) =>
                 {
-                    Marshal.WriteByte(currWritePtr, Marshal.ReadByte(currReadPtr));
-                    Marshal.WriteByte(currWritePtr, 1, Marshal.ReadByte(currReadPtr + 1));
-                    Marshal.WriteByte(currWritePtr, 2, Marshal.ReadByte(currReadPtr + 2));
-                    currReadPtr = IntPtr.Add(currReadPtr, 4);
-                    currWritePtr = IntPtr.Add(currWritePtr, 3);
-                }
+                    var rPtr = readPtr + 4 * i;
+                    var wPtr = writePtr + 3 * i;
+                    Marshal.WriteByte(wPtr, Marshal.ReadByte(rPtr));
+                    Marshal.WriteByte(wPtr, 1, Marshal.ReadByte(rPtr + 1));
+                    Marshal.WriteByte(wPtr, 2, Marshal.ReadByte(rPtr + 2));
+                });
                 bm.UnlockBits(bmData);
                 break;
             default:
