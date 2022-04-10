@@ -65,19 +65,19 @@ class Script
         var list = new mpv_node_list();
         var listValues = new libmpv.mpv_node();
         
-        listValues.format = libmpv.mpv_format.MPV_FORMAT_STRING;
         IntPtr commandPtr = Marshal.StringToHGlobalAnsi("screenshot-raw");
         listValues.str = commandPtr;
+        listValues.format = libmpv.mpv_format.MPV_FORMAT_STRING;
 
         var listValPtr = Marshal.AllocHGlobal(Marshal.SizeOf(listValues));
         Marshal.StructureToPtr(listValues, listValPtr, false);
         list.values = listValPtr;
 
         var listPtr = Marshal.AllocHGlobal(Marshal.SizeOf(list));
-        Marshal.StructureToPtr(list, listPtr, false);
         list.num = 1;
         args.list = listPtr;
         args.format = libmpv.mpv_format.MPV_FORMAT_NODE_ARRAY;
+        Marshal.StructureToPtr(list, listPtr, false);
 
         var res = mpv_command_node(m_core.Handle, args, result);
         m_core.CommandV("show-text", res.ToString());
