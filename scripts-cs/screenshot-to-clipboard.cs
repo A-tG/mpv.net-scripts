@@ -19,6 +19,71 @@ struct mpv_node_list
     public IntPtr keys;
 }
 
+[StructLayout(LayoutKind.Sequential)]
+struct mpv_byte_array
+{
+    public IntPtr data;
+    public UIntPtr size;
+}
+
+class MpvScreenshotData
+{
+    public long w, h, stride;
+    public string format = string.Empty;
+    public byte[] data = Array.Empty<byte>();
+
+    static public MpvScreenshotData FromMpvNodeList(mpv_node_list list)
+    {
+        var screenshotData = new MpvScreenshotData();
+
+        for (int i = 0; i < list.num; i++)
+        {
+            int keyOffset = i * IntPtr.Size;
+            int nodeOffset = i * Marshal.SizeOf<libmpv.mpv_node>();
+
+            var ptrVal = Marshal.ReadInt64(list.keys + keyOffset);
+
+            string key = Marshal.PtrToStringAnsi(new IntPtr(ptrVal));
+            var node = Marshal.PtrToStructure<libmpv.mpv_node>(list.values + nodeOffset);
+
+            switch (key)
+            {
+                case "w":
+                    screenshotData.w = node.int64;
+                    break;
+                case "h":
+                    screenshotData.h = node.int64;
+                    break;
+                case "stride":
+                    screenshotData.stride = node.int64;
+                    break;
+                case "format":
+                    screenshotData.format = Marshal.PtrToStringAnsi(node.str);
+                    break;
+                case "data":
+                    var ba = Marshal.PtrToStructure<mpv_byte_array>(node.ba);
+                    screenshotData.data = UnmanagedArrToArr(ba.data, ba.size.ToUInt64());
+                    break;
+                default:
+                    break;
+            }
+        }
+        return screenshotData;
+    }
+
+    private static byte[] UnmanagedArrToArr(IntPtr ptr, ulong len)
+    {
+        var arr = new byte[len];
+        var currentPtr = ptr;
+        for (ulong i = 0; i < len; i++)
+        {
+            arr[i] = Marshal.ReadByte(currentPtr);
+            currentPtr = IntPtr.Add(currentPtr, 1);
+        }
+        return arr;
+    }
+}
+
 class Script
 {
     const string Name = "screenshot-to-clipboard"; 
@@ -30,7 +95,7 @@ class Script
         m_core.ClientMessage += OnMessage;
     }
 
-    public bool TryScreenshotToClipBoard()
+    public bool TryScreenshotToClipboard()
     {
         bool result = false;
         try
@@ -59,7 +124,7 @@ class Script
     [DllImport("mpv-2.dll")]
     internal static extern int mpv_command_node(IntPtr ctx, libmpv.mpv_node args, IntPtr result);
 
-    private void GetRawScreenshot()
+    private MpvScreenshotData GetRawScreenshot()
     {
         var args = new libmpv.mpv_node();
         var result = new libmpv.mpv_node();
@@ -86,30 +151,18 @@ class Script
 
         var res = mpv_command_node(m_core.Handle, args, resultPtr);
 
-        result = (libmpv.mpv_node)Marshal.PtrToStructure(resultPtr, typeof(libmpv.mpv_node));
+        result = Marshal.PtrToStructure<libmpv.mpv_node>(resultPtr);
         var resultList = Marshal.PtrToStructure<mpv_node_list>(result.list);
-        GetBitmapFromMpvNodeList(resultList);
+
+        var screenshot = MpvScreenshotData.FromMpvNodeList(resultList);
 
         //libmpv.mpv_free_node_contents(resultPtr);
         Marshal.FreeHGlobal(resultPtr);
         Marshal.FreeHGlobal(commandPtr);
         Marshal.FreeHGlobal(listValPtr);
         Marshal.FreeHGlobal(listPtr);
-    }
 
-    private void GetBitmapFromMpvNodeList(mpv_node_list list)
-    {
-        var len = list.num;
-        var dict = new Dictionary<string, IntPtr>(len);
-        var arr = new string[len];
-        for (int i = 0; i < len; i++)
-        {
-            var ptrVal = Marshal.ReadInt64(list.keys + i);
-            var key = Marshal.PtrToStringAnsi(new IntPtr(ptrVal));
-            //dict.Add(key, list.values + i);
-            arr[i] = key;
-        }
-        m_core.CommandV("show-text", string.Join(",", arr)); // PROBLEM: prints w,,,, all strings are empty except first
+        return screenshot;
     }
 
     private void OnMessage(string[] args)
@@ -118,11 +171,13 @@ class Script
 
         if (args[0] != Name) return;
 
-        GetRawScreenshot(); return;
+        var scr = GetRawScreenshot();
+        m_core.CommandV("show-text", scr.stride.ToString()); return;
+
         string text = "Copy Screenshot to clipboard";
         m_core.CommandV("show-text", text);
 
-        text += TryScreenshotToClipBoard() ?
+        text += TryScreenshotToClipboard() ?
             ": Succeded" :
             ": Failed";
         m_core.CommandV("show-text", text);
