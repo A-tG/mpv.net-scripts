@@ -2,6 +2,7 @@ using mpvnet;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -26,64 +27,6 @@ struct mpv_byte_array
     public UIntPtr size;
 }
 
-class MpvScreenshotData
-{
-    public long w, h, stride;
-    public string format = string.Empty;
-    public byte[] data = Array.Empty<byte>();
-
-    static public MpvScreenshotData FromMpvNodeList(mpv_node_list list)
-    {
-        var screenshotData = new MpvScreenshotData();
-
-        for (int i = 0; i < list.num; i++)
-        {
-            int keyOffset = i * IntPtr.Size;
-            int nodeOffset = i * Marshal.SizeOf<libmpv.mpv_node>();
-
-            var ptrVal = Marshal.ReadInt64(list.keys + keyOffset);
-
-            string key = Marshal.PtrToStringAnsi(new IntPtr(ptrVal));
-            var node = Marshal.PtrToStructure<libmpv.mpv_node>(list.values + nodeOffset);
-
-            switch (key)
-            {
-                case "w":
-                    screenshotData.w = node.int64;
-                    break;
-                case "h":
-                    screenshotData.h = node.int64;
-                    break;
-                case "stride":
-                    screenshotData.stride = node.int64;
-                    break;
-                case "format":
-                    screenshotData.format = Marshal.PtrToStringAnsi(node.str);
-                    break;
-                case "data":
-                    var ba = Marshal.PtrToStructure<mpv_byte_array>(node.ba);
-                    screenshotData.data = UnmanagedArrToArr(ba.data, ba.size.ToUInt64());
-                    break;
-                default:
-                    break;
-            }
-        }
-        return screenshotData;
-    }
-
-    private static byte[] UnmanagedArrToArr(IntPtr ptr, ulong len)
-    {
-        var arr = new byte[len];
-        var currentPtr = ptr;
-        for (ulong i = 0; i < len; i++)
-        {
-            arr[i] = Marshal.ReadByte(currentPtr);
-            currentPtr = IntPtr.Add(currentPtr, 1);
-        }
-        return arr;
-    }
-}
-
 class Script
 {
     const string Name = "screenshot-to-clipboard"; 
@@ -100,16 +43,12 @@ class Script
         bool result = false;
         try
         {
-            var path = CreateTempScreenshot();
+            var img = GetRawScreenshot();
 
             var thread = new Thread(() =>
             {
-                using (var img = new Bitmap(path))
-                {
-                    // need to be done in STA thread
-                    Clipboard.SetImage(img);
-                }
-                File.Delete(path);
+                // need to be done in STA thread
+                Clipboard.SetImage(img);
             });
             thread.SetApartmentState(ApartmentState.STA);
             thread.Start();
@@ -124,7 +63,7 @@ class Script
     [DllImport("mpv-2.dll")]
     internal static extern int mpv_command_node(IntPtr ctx, libmpv.mpv_node args, IntPtr result);
 
-    private MpvScreenshotData GetRawScreenshot()
+    private Bitmap GetRawScreenshot()
     {
         var args = new libmpv.mpv_node();
         var result = new libmpv.mpv_node();
@@ -154,7 +93,7 @@ class Script
         result = Marshal.PtrToStructure<libmpv.mpv_node>(resultPtr);
         var resultList = Marshal.PtrToStructure<mpv_node_list>(result.list);
 
-        var screenshot = MpvScreenshotData.FromMpvNodeList(resultList);
+        var screenshot = BitmapFromMpvNodeList(resultList);
 
         //libmpv.mpv_free_node_contents(resultPtr);
         Marshal.FreeHGlobal(resultPtr);
@@ -164,15 +103,75 @@ class Script
 
         return screenshot;
     }
+    public Bitmap BitmapFromMpvNodeList(mpv_node_list list)
+    {
+        Bitmap bm;
+        long w, h, stride;
+        w = h = stride = 0;
+        string format = string.Empty;
+        var ba = new mpv_byte_array();
+
+        for (int i = 0; i < list.num; i++)
+        {
+            int keyOffset = i * IntPtr.Size;
+            int nodeOffset = i * Marshal.SizeOf<libmpv.mpv_node>();
+
+            var ptrVal = Marshal.ReadInt64(list.keys + keyOffset);
+
+            string key = Marshal.PtrToStringAnsi(new IntPtr(ptrVal));
+            var node = Marshal.PtrToStructure<libmpv.mpv_node>(list.values + nodeOffset);
+
+            switch (key)
+            {
+                case "w":
+                    w = node.int64;
+                    break;
+                case "h":
+                    h = node.int64;
+                    break;
+                case "stride":
+                    stride = node.int64;
+                    break;
+                case "format":
+                    format = Marshal.PtrToStringAnsi(node.str);
+                    break;
+                case "data":
+                    ba = Marshal.PtrToStructure<mpv_byte_array>(node.ba);
+                    break;
+                default:
+                    break;
+            }
+        }
+        switch (format)
+        {
+            case "bgr0":
+                bm = new Bitmap((int)w, (int)h, PixelFormat.Format24bppRgb);
+                var currPtr = ba.data;
+                var len = ba.size.ToUInt64();
+                for (int y = 0; y < h; y++)
+                {
+                    for (int x = 0; x < w; x++)
+                    {
+                        var B = Marshal.ReadByte(currPtr);
+                        var G = Marshal.ReadByte(currPtr, 1);
+                        var R = Marshal.ReadByte(currPtr, 2);
+                        var color = Color.FromArgb(R, G, B);
+                        bm.SetPixel(x, y, color);
+                        currPtr = IntPtr.Add(currPtr, 4);
+                    }
+                }
+                break;
+            default:
+                throw new ArgumentException("Not supported color format");
+        }
+        return bm;
+    }
 
     private void OnMessage(string[] args)
     {
         if ((args == null) || (args.Length == 0)) return;
 
         if (args[0] != Name) return;
-
-        var scr = GetRawScreenshot();
-        m_core.CommandV("show-text", scr.stride.ToString()); return;
 
         string text = "Copy Screenshot to clipboard";
         m_core.CommandV("show-text", text);
@@ -181,13 +180,5 @@ class Script
             ": Succeded" :
             ": Failed";
         m_core.CommandV("show-text", text);
-    }
-
-    private string CreateTempScreenshot()
-    {
-        var fileName = Guid.NewGuid().ToString() + ".png";
-        var path = Path.Combine(Path.GetTempPath(), fileName);
-        m_core.CommandV("screenshot-to-file", path);
-        return path;
     }
 }
