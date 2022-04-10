@@ -1,7 +1,9 @@
 using mpvnet;
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows.Forms;
@@ -85,14 +87,29 @@ class Script
         var res = mpv_command_node(m_core.Handle, args, resultPtr);
 
         result = (libmpv.mpv_node)Marshal.PtrToStructure(resultPtr, typeof(libmpv.mpv_node));
-        var resulList = (mpv_node_list)Marshal.PtrToStructure(result.list, typeof(mpv_node_list));
-        m_core.CommandV("show-text", resulList.num.ToString());
+        var resultList = Marshal.PtrToStructure<mpv_node_list>(result.list);
+        GetBitmapFromMpvNodeList(resultList);
 
-        libmpv.mpv_free_node_contents(resultPtr);
+        //libmpv.mpv_free_node_contents(resultPtr);
         Marshal.FreeHGlobal(resultPtr);
         Marshal.FreeHGlobal(commandPtr);
         Marshal.FreeHGlobal(listValPtr);
         Marshal.FreeHGlobal(listPtr);
+    }
+
+    private void GetBitmapFromMpvNodeList(mpv_node_list list)
+    {
+        var len = list.num;
+        var dict = new Dictionary<string, IntPtr>(len);
+        var arr = new string[len];
+        for (int i = 0; i < len; i++)
+        {
+            var ptrVal = Marshal.ReadInt64(list.keys + i);
+            var key = Marshal.PtrToStringAnsi(new IntPtr(ptrVal));
+            //dict.Add(key, list.values + i);
+            arr[i] = key;
+        }
+        m_core.CommandV("show-text", string.Join(",", arr)); // PROBLEM: prints w,,,, all strings are empty except first
     }
 
     private void OnMessage(string[] args)
@@ -104,6 +121,7 @@ class Script
         GetRawScreenshot(); return;
         string text = "Copy Screenshot to clipboard";
         m_core.CommandV("show-text", text);
+
         text += TryScreenshotToClipBoard() ?
             ": Succeded" :
             ": Failed";
