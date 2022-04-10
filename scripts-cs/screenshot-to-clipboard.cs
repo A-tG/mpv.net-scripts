@@ -95,7 +95,7 @@ class Script
 
         var screenshot = BitmapFromMpvNodeList(resultList);
 
-        //libmpv.mpv_free_node_contents(resultPtr);
+        libmpv.mpv_free_node_contents(resultPtr);
         Marshal.FreeHGlobal(resultPtr);
         Marshal.FreeHGlobal(commandPtr);
         Marshal.FreeHGlobal(listValPtr);
@@ -151,10 +151,10 @@ class Script
                 var rect = new Rectangle(0, 0, (int)w, (int)h);
                 var bmData = bm.LockBits(rect, ImageLockMode.ReadWrite, PixFormat);
 
-                var len = ba.size.ToUInt64();
+                var len = (int)(ba.size.ToUInt64() / 4);
                 var currReadPtr = ba.data;
                 var currWritePtr = bmData.Scan0;
-                for (ulong i = 0; i < len; i += 4)
+                for (int i = 0; i < len; i++)
                 {
                     Marshal.WriteByte(currWritePtr, Marshal.ReadByte(currReadPtr));
                     Marshal.WriteByte(currWritePtr, 1, Marshal.ReadByte(currReadPtr + 1));
