@@ -38,24 +38,28 @@ class Script
 
     public bool TryScreenshotToClipboard()
     {
-        bool result = false;
         try
         {
-            var img = GetRawScreenshot();
-
-            var thread = new Thread(() =>
-            {
-                // need to be done in STA thread
-                Clipboard.SetImage(img);
-            });
-            thread.SetApartmentState(ApartmentState.STA);
-            thread.Start();
-
-            thread.Join();
-            result = true;
+            ScreenshotToClipboard();
+            return true;
         }
         catch { }
-        return result;
+        return false;
+    }
+
+    private void ScreenshotToClipboard()
+    {
+        var img = GetRawScreenshot();
+
+        var thread = new Thread(() =>
+        {
+            // need to be done in STA thread
+            Clipboard.SetImage(img);
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+
+        thread.Join();
     }
 
     [DllImport("mpv-2.dll")]
@@ -86,11 +90,14 @@ class Script
         var resultPtr = Marshal.AllocHGlobal(Marshal.SizeOf(result));
         Marshal.StructureToPtr(result, resultPtr, false);
 
-        var res = mpv_command_node(m_core.Handle, args, resultPtr);
+        var res = (libmpv.mpv_error)mpv_command_node(m_core.Handle, args, resultPtr);
+        if (res != libmpv.mpv_error.MPV_ERROR_SUCCESS)
+        {
+            throw new InvalidOperationException("Command returned error: " + ((int)res).ToString() + " " + res.ToString());
+        }
 
         result = Marshal.PtrToStructure<libmpv.mpv_node>(resultPtr);
         var resultList = Marshal.PtrToStructure<mpv_node_list>(result.list);
-
 
         var screenshot = BitmapFromMpvNodeList(resultList);
 
